@@ -1,0 +1,151 @@
+import React, { useState } from 'react';
+import { AppProvider, useApp } from './AppContext';
+import Dashboard from './components/Dashboard';
+import InvoiceForm from './components/InvoiceForm';
+import WiseFeed from './components/WiseFeed';
+import { LayoutDashboard, FileText, CreditCard, Settings, PlusCircle } from 'lucide-react';
+import clsx from 'clsx';
+
+const InvoiceList = ({ setView }) => {
+  const { invoices, clients } = useApp();
+  
+  const getClientName = (id) => clients.find(c => c.id === id)?.name || 'Unknown';
+  const getStatusColor = (status) => {
+    switch(status) {
+      case 'Paid': return 'bg-green-100 text-green-800';
+      case 'Overdue': return 'bg-red-100 text-red-800';
+      case 'Sent': return 'bg-blue-100 text-blue-800';
+      default: return 'bg-yellow-100 text-yellow-800';
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+      <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+        <h2 className="text-xl font-bold text-gray-800">Invoices</h2>
+        <button onClick={() => setView('create-invoice')} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700">
+          <PlusCircle size={18} /> Create New
+        </button>
+      </div>
+      <table className="w-full">
+        <thead className="bg-gray-50 text-gray-500 text-sm">
+          <tr>
+            <th className="text-left p-4">Number</th>
+            <th className="text-left p-4">Client</th>
+            <th className="text-left p-4">Date</th>
+            <th className="text-right p-4">Total</th>
+            <th className="text-center p-4">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {invoices.map(inv => (
+            <tr key={inv.id} className="border-t border-gray-50 hover:bg-gray-50">
+              <td className="p-4 font-medium text-gray-700">{inv.invoiceNumber}</td>
+              <td className="p-4 text-gray-600">{getClientName(inv.clientId)}</td>
+              <td className="p-4 text-gray-500 text-sm">{inv.dueDate}</td>
+              <td className="p-4 text-right font-mono text-gray-700">${inv.total}</td>
+              <td className="p-4 text-center">
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(inv.status)}`}>
+                  {inv.status}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+const SettingsView = () => {
+  const { emailTemplate, setEmailTemplate } = useApp();
+  return (
+    <div className="max-w-2xl bg-white p-8 rounded-xl shadow-sm">
+      <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+        <Settings className="w-6 h-6 text-gray-500"/> Configuration
+      </h2>
+      
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-gray-700 mb-2">Static Email Description Template</label>
+        <p className="text-xs text-gray-500 mb-2">
+          This text will be applied to all invoice emails. You can use placeholders like <code className="bg-gray-100 p-0.5 rounded">[Contact Name]</code>, <code className="bg-gray-100 p-0.5 rounded">[Invoice Number]</code>, and <code className="bg-gray-100 p-0.5 rounded">[Total]</code>.
+        </p>
+        <textarea 
+          className="w-full h-48 p-4 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          value={emailTemplate}
+          onChange={(e) => setEmailTemplate(e.target.value)}
+        />
+      </div>
+      <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+        Save Settings
+      </button>
+    </div>
+  );
+}
+
+const MainApp = () => {
+  const [activeTab, setActiveTab] = useState('dashboard');
+
+  const renderContent = () => {
+    switch(activeTab) {
+      case 'dashboard': return <Dashboard />;
+      case 'invoices': return <InvoiceList setView={setActiveTab} />;
+      case 'create-invoice': return <InvoiceForm setView={setActiveTab} />;
+      case 'wise': return <WiseFeed />;
+      case 'settings': return <SettingsView />;
+      default: return <Dashboard />;
+    }
+  };
+
+  const NavItem = ({ id, icon: Icon, label }) => (
+    <button 
+      onClick={() => setActiveTab(id)}
+      className={clsx(
+        "w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 ease-in-out",
+        activeTab === id || (activeTab === 'create-invoice' && id === 'invoices') 
+          ? "bg-white text-gray-900 shadow-sm ring-1 ring-gray-200/50" 
+          : "text-gray-500 hover:text-gray-900 hover:bg-gray-100/50"
+      )}
+    >
+      <Icon size={18} strokeWidth={2} />
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#FDFDFD] flex text-gray-800 font-sans">
+      <aside className="w-64 bg-[#F8F9FA] fixed h-full z-10 flex flex-col">
+        <div className="p-8 mb-2">
+          <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2 tracking-tight">
+            <div className="w-6 h-6 bg-gray-900 rounded-lg flex items-center justify-center">
+              <span className="text-white text-xs font-bold">B</span>
+            </div>
+            Butter
+          </h1>
+        </div>
+        <nav className="px-4 space-y-1 flex-1">
+          <NavItem id="dashboard" icon={LayoutDashboard} label="Dashboard" />
+          <NavItem id="invoices" icon={FileText} label="Invoices" />
+          <NavItem id="wise" icon={CreditCard} label="Wise Feed" />
+        </nav>
+        <div className="p-4 mt-auto border-t border-gray-100">
+          <NavItem id="settings" icon={Settings} label="Settings" />
+        </div>
+      </aside>
+
+      <main className="flex-1 ml-64 p-10">
+        <div className="max-w-5xl mx-auto">
+          {renderContent()}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default function App() {
+  return (
+    <AppProvider>
+      <MainApp />
+    </AppProvider>
+  );
+}

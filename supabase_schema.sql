@@ -62,12 +62,22 @@ create table transactions (
   reconciled boolean default false
 );
 
--- 6. Enable RLS (Security) - Allow authenticated users to read/write
+-- 6. User Settings Table (for email template and Google Script URL)
+create table user_settings (
+  id text primary key default gen_random_uuid()::text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  email_template text,
+  google_script_url text
+);
+
+-- 7. Enable RLS (Security) - Allow authenticated users to read/write
 alter table clients enable row level security;
 alter table invoices enable row level security;
 alter table recurring_invoices enable row level security;
 alter table expenses enable row level security;
 alter table transactions enable row level security;
+alter table user_settings enable row level security;
 
 -- Simple policy: Allow all operations for authenticated users
 -- (Since you are the only user for now)
@@ -76,4 +86,19 @@ create policy "Enable all for users" on invoices for all using (true);
 create policy "Enable all for users" on recurring_invoices for all using (true);
 create policy "Enable all for users" on expenses for all using (true);
 create policy "Enable all for users" on transactions for all using (true);
+create policy "Enable all for users" on user_settings for all using (true);
+
+-- Auto-update updated_at timestamp for user_settings
+create or replace function update_updated_at_column()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger update_user_settings_updated_at
+before update on user_settings
+for each row
+execute function update_updated_at_column();
 

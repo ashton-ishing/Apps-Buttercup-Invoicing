@@ -6,6 +6,8 @@ export default function ClientsList() {
   const { clients, invoices, addClient, removeClient } = useApp();
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [isAdding, setIsAdding] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   
   const [newClient, setNewClient] = useState({
     name: '',
@@ -22,15 +24,26 @@ export default function ClientsList() {
       .reduce((sum, inv) => sum + inv.total, 0);
   };
 
-  const handleAddClient = () => {
-    if (!newClient.name || !newClient.email) return alert('Please fill in required fields');
+  const handleAddClient = async () => {
+    if (!newClient.name || !newClient.email) {
+      setErrorMessage('Please fill in required fields (Company Name and Email)');
+      return;
+    }
     
-    addClient({
-      id: `c${Date.now()}`,
-      ...newClient
-    });
-    setNewClient({ name: '', contactName: '', email: '' });
-    setShowAddModal(false);
+    setIsAdding(true);
+    setErrorMessage('');
+    
+    try {
+      // Don't include id - let Supabase generate UUID
+      await addClient(newClient);
+      setNewClient({ name: '', contactName: '', email: '' });
+      setShowAddModal(false);
+    } catch (error) {
+      setErrorMessage(error.message || 'Failed to add client. Please try again.');
+      console.error('Error adding client:', error);
+    } finally {
+      setIsAdding(false);
+    }
   };
 
   const availableYears = Array.from(
@@ -113,15 +126,24 @@ export default function ClientsList() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm">
             <div className="bg-white p-8 rounded-xl shadow-2xl max-w-md w-full">
                 <h3 className="text-xl font-bold mb-6">Add New Client</h3>
+                {errorMessage && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                    {errorMessage}
+                  </div>
+                )}
                 <div className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Company Name <span className="text-red-500">*</span></label>
                         <input 
                             type="text" 
                             className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             value={newClient.name}
-                            onChange={e => setNewClient({...newClient, name: e.target.value})}
+                            onChange={e => {
+                              setNewClient({...newClient, name: e.target.value});
+                              setErrorMessage('');
+                            }}
                             placeholder="e.g. Acme Corp"
+                            disabled={isAdding}
                         />
                     </div>
                     <div>
@@ -132,31 +154,42 @@ export default function ClientsList() {
                             value={newClient.contactName}
                             onChange={e => setNewClient({...newClient, contactName: e.target.value})}
                             placeholder="e.g. John Doe"
+                            disabled={isAdding}
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Email <span className="text-red-500">*</span></label>
                         <input 
                             type="email" 
                             className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             value={newClient.email}
-                            onChange={e => setNewClient({...newClient, email: e.target.value})}
+                            onChange={e => {
+                              setNewClient({...newClient, email: e.target.value});
+                              setErrorMessage('');
+                            }}
                             placeholder="john@example.com"
+                            disabled={isAdding}
                         />
                     </div>
                 </div>
                 <div className="flex justify-end gap-3 mt-8">
                     <button 
-                        onClick={() => setShowAddModal(false)}
-                        className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                        onClick={() => {
+                          setShowAddModal(false);
+                          setErrorMessage('');
+                          setNewClient({ name: '', contactName: '', email: '' });
+                        }}
+                        disabled={isAdding}
+                        className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50"
                     >
                         Cancel
                     </button>
                     <button 
                         onClick={handleAddClient}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        disabled={isAdding}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        Add Client
+                        {isAdding ? 'Adding...' : 'Add Client'}
                     </button>
                 </div>
             </div>

@@ -4,6 +4,8 @@ import { Plus, Save, Calendar } from 'lucide-react';
 
 export default function RecurringInvoiceForm({ setView }) {
   const { clients, addRecurringInvoice } = useApp();
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   
   const [formData, setFormData] = useState({
     clientId: '',
@@ -18,26 +20,41 @@ export default function RecurringInvoiceForm({ setView }) {
   const calculateTax = () => formData.includeGst ? calculateSubtotal() * 0.1 : 0;
   const calculateTotal = () => calculateSubtotal() + calculateTax();
 
-  const handleSave = () => {
-    if(!formData.clientId) return alert('Select a client');
+  const handleSave = async () => {
+    if(!formData.clientId) {
+      setErrorMessage('Please select a client');
+      return;
+    }
 
-    const total = calculateTotal();
-    const newRecurring = {
-      id: `rec${Date.now()}`,
-      clientId: formData.clientId,
-      startDate: formData.startDate,
-      frequency: formData.frequency,
-      paymentTerms: formData.paymentTerms,
-      nextRunDate: formData.startDate, // simplified for now
-      status: 'Active',
-      total: total,
-      subtotal: calculateSubtotal(),
-      tax: calculateTax(),
-      includeGst: formData.includeGst,
-      lineItems: formData.lineItems
-    };
-    addRecurringInvoice(newRecurring);
-    setView('recurring-invoices'); // Go back to recurring list
+    setIsSaving(true);
+    setErrorMessage('');
+
+    try {
+      const total = calculateTotal();
+      
+      // Don't include id - let Supabase generate UUID
+      const newRecurring = {
+        clientId: formData.clientId,
+        startDate: formData.startDate,
+        frequency: formData.frequency,
+        paymentTerms: formData.paymentTerms,
+        nextRunDate: formData.startDate, // simplified for now
+        status: 'Active',
+        total: total,
+        subtotal: calculateSubtotal(),
+        tax: calculateTax(),
+        includeGst: formData.includeGst,
+        lineItems: formData.lineItems
+      };
+      
+      await addRecurringInvoice(newRecurring);
+      setView('recurring-invoices'); // Go back to recurring list
+    } catch (error) {
+      setErrorMessage(error.message || 'Failed to save recurring invoice. Please try again.');
+      console.error('Error saving recurring invoice:', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -48,6 +65,11 @@ export default function RecurringInvoiceForm({ setView }) {
         </div>
         <h2 className="text-2xl font-bold">New Recurring Invoice</h2>
       </div>
+      {errorMessage && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {errorMessage}
+        </div>
+      )}
       
       <div className="grid grid-cols-3 gap-6 mb-8">
         <div>
@@ -166,13 +188,20 @@ export default function RecurringInvoiceForm({ setView }) {
       </div>
 
       <div className="flex justify-between items-center pt-4 border-t">
-        <button onClick={() => setView('recurring-invoices')} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">Cancel</button>
+        <button 
+          onClick={() => setView('recurring-invoices')} 
+          disabled={isSaving}
+          className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50"
+        >
+          Cancel
+        </button>
         <div className="flex gap-3">
             <button 
                 onClick={handleSave} 
-                className="flex items-center px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+                disabled={isSaving}
+                className="flex items-center px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-                <Save size={18} className="mr-2"/> Save Recurring Profile
+                <Save size={18} className="mr-2"/> {isSaving ? 'Saving...' : 'Save Recurring Profile'}
             </button>
         </div>
       </div>

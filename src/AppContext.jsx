@@ -36,42 +36,99 @@ export const AppProvider = ({ children }) => {
     const fetchData = async () => {
       setLoading(true);
       
-      // Ideally these would be parallel, but sequential is fine for now
-      const { data: cl } = await supabase.from('clients').select('*');
-      if (cl) setClients(cl);
+      try {
+        // Fetch all data in parallel
+        const [clientsRes, invoicesRes, recurringRes, expensesRes, transactionsRes] = await Promise.all([
+          supabase.from('clients').select('*'),
+          supabase.from('invoices').select('*'),
+          supabase.from('recurring_invoices').select('*'),
+          supabase.from('expenses').select('*'),
+          supabase.from('transactions').select('*')
+        ]);
 
-      const { data: inv } = await supabase.from('invoices').select('*');
-      if (inv) setInvoices(inv);
-      
-      const { data: rec } = await supabase.from('recurring_invoices').select('*');
-      if (rec) setRecurringInvoices(rec);
-
-      const { data: exp } = await supabase.from('expenses').select('*');
-      if (exp) setExpenses(exp);
-
-      const { data: tx } = await supabase.from('transactions').select('*');
-      if (tx) setTransactions(tx);
-
-      setLoading(false);
+        if (clientsRes.data) setClients(clientsRes.data);
+        if (invoicesRes.data) setInvoices(invoicesRes.data);
+        if (recurringRes.data) setRecurringInvoices(recurringRes.data);
+        if (expensesRes.data) setExpenses(expensesRes.data);
+        if (transactionsRes.data) setTransactions(transactionsRes.data);
+        
+        // Load settings (handle case where no settings exist)
+        const settingsRes = await supabase.from('user_settings').select('*').limit(1).maybeSingle();
+        if (settingsRes.data) {
+          setEmailTemplate(settingsRes.data.email_template || '');
+          setGoogleScriptUrl(settingsRes.data.google_script_url || '');
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchData();
   }, [supabase, session]);
 
   const addInvoice = async (invoice) => {
-    const { error } = await supabase.from('invoices').insert([invoice]);
-    if (!error) setInvoices([...invoices, invoice]);
-    else console.error("Error adding invoice:", error);
+    try {
+      // Remove id if provided - let Supabase generate UUID
+      const { id, ...invoiceData } = invoice;
+      const { data, error } = await supabase.from('invoices').insert([invoiceData]).select().single();
+      
+      if (error) {
+        console.error('Error adding invoice:', error);
+        throw new Error(error.message || 'Failed to add invoice');
+      }
+      
+      if (data) {
+        setInvoices([...invoices, data]);
+        return { success: true, data };
+      }
+    } catch (error) {
+      console.error('Error adding invoice:', error);
+      throw error;
+    }
   };
 
   const addRecurringInvoice = async (invoice) => {
-    const { error } = await supabase.from('recurring_invoices').insert([invoice]);
-    if (!error) setRecurringInvoices([...recurringInvoices, invoice]);
+    try {
+      // Remove id if provided - let Supabase generate UUID
+      const { id, ...invoiceData } = invoice;
+      const { data, error } = await supabase.from('recurring_invoices').insert([invoiceData]).select().single();
+      
+      if (error) {
+        console.error('Error adding recurring invoice:', error);
+        throw new Error(error.message || 'Failed to add recurring invoice');
+      }
+      
+      if (data) {
+        setRecurringInvoices([...recurringInvoices, data]);
+        return { success: true, data };
+      }
+    } catch (error) {
+      console.error('Error adding recurring invoice:', error);
+      throw error;
+    }
   };
   
   const addClient = async (client) => {
-    const { error } = await supabase.from('clients').insert([client]);
-    if (!error) setClients([...clients, client]);
+    try {
+      // Remove id if provided - let Supabase generate UUID
+      const { id, ...clientData } = client;
+      const { data, error } = await supabase.from('clients').insert([clientData]).select().single();
+      
+      if (error) {
+        console.error('Error adding client:', error);
+        throw new Error(error.message || 'Failed to add client');
+      }
+      
+      if (data) {
+        setClients([...clients, data]);
+        return { success: true, data };
+      }
+    } catch (error) {
+      console.error('Error adding client:', error);
+      throw error;
+    }
   };
 
   const removeClient = async (clientId) => {
@@ -93,6 +150,37 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  const saveSettings = async (emailTemplate, googleScriptUrl) => {
+    try {
+      // Check if settings exist (use maybeSingle to handle no rows)
+      const { data: existing } = await supabase.from('user_settings').select('id').limit(1).maybeSingle();
+      
+      const settingsData = {
+        email_template: emailTemplate,
+        google_script_url: googleScriptUrl,
+        updated_at: new Date().toISOString()
+      };
+
+      let result;
+      if (existing) {
+        // Update existing
+        result = await supabase.from('user_settings').update(settingsData).eq('id', existing.id).select().single();
+      } else {
+        // Insert new
+        result = await supabase.from('user_settings').insert([settingsData]).select().single();
+      }
+
+      if (result.error) {
+        throw new Error(result.error.message || 'Failed to save settings');
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      throw error;
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       supabase, // Expose the authenticated client
@@ -104,7 +192,8 @@ export const AppProvider = ({ children }) => {
       emailTemplate, setEmailTemplate,
       googleScriptUrl, setGoogleScriptUrl,
       dateRange, setDateRange,
-      loading
+      loading,
+      saveSettings
     }}>
       {children}
     </AppContext.Provider>

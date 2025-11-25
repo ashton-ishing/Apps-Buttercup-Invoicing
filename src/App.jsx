@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { AppProvider, useApp } from './AppContext';
 import { supabase } from './supabaseClient';
 import { SignedIn, SignedOut, useClerk, UserButton } from "@clerk/clerk-react";
@@ -125,7 +125,26 @@ const InvoiceList = ({ setView }) => {
 };
 
 const SettingsView = () => {
-  const { emailTemplate, setEmailTemplate, googleScriptUrl, setGoogleScriptUrl } = useApp();
+  const { emailTemplate, setEmailTemplate, googleScriptUrl, setGoogleScriptUrl, saveSettings } = useApp();
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveMessage('');
+    
+    try {
+      await saveSettings(emailTemplate, googleScriptUrl);
+      setSaveMessage('Settings saved successfully!');
+      setTimeout(() => setSaveMessage(''), 3000);
+    } catch (error) {
+      setSaveMessage(`Error: ${error.message || 'Failed to save settings'}`);
+      console.error('Save error:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="max-w-2xl bg-white p-8 rounded-xl shadow-sm">
       <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
@@ -155,9 +174,21 @@ const SettingsView = () => {
           onChange={(e) => setGoogleScriptUrl(e.target.value)}
         />
       </div>
-      <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-        Save Settings
-      </button>
+      
+      <div className="flex items-center gap-4">
+        <button 
+          onClick={handleSave}
+          disabled={isSaving}
+          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isSaving ? 'Saving...' : 'Save Settings'}
+        </button>
+        {saveMessage && (
+          <span className={`text-sm ${saveMessage.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
+            {saveMessage}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

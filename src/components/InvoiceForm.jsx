@@ -7,6 +7,8 @@ export default function InvoiceForm({ setView }) {
   const { clients, addInvoice, emailTemplate, googleScriptUrl } = useApp();
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   
   const [formData, setFormData] = useState({
     clientId: '',
@@ -26,77 +28,121 @@ export default function InvoiceForm({ setView }) {
   const calculateTax = () => formData.includeGst ? calculateSubtotal() * 0.1 : 0;
   const calculateTotal = () => calculateSubtotal() + calculateTax();
 
+  const generateInvoiceNumber = () => {
+    // Generate invoice number based on current date: INV-YYYYMMDD-XXXX
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    return `INV-${year}${month}${day}-${random}`;
+  };
+
   const handleSave = async (status) => {
-    const total = calculateTotal();
-    const newInvoice = {
-      id: `inv${Date.now()}`,
-      clientId: formData.clientId,
-      invoiceNumber: `INV-${Math.floor(Math.random() * 10000)}`,
-      issueDate: formData.issueDate,
-      dueDate: getDueDate(formData.issueDate, formData.paymentTerms),
-      status: status,
-      total: total,
-      subtotal: calculateSubtotal(),
-      tax: calculateTax(),
-      includeGst: formData.includeGst,
-      lineItems: formData.lineItems
-    };
-
-    if (status === 'Sent' && googleScriptUrl) {
-      setIsSending(true);
-      const client = clients.find(c => c.id === formData.clientId);
-      
-      // Generate PDF Blob
-      const doc = generateInvoicePDF(newInvoice, client);
-      const pdfBase64 = doc.output('datauristring').split(',')[1]; // Remove "data:application/pdf;base64,"
-
-      try {
-        // Send to Google Apps Script
-        await fetch(googleScriptUrl, {
-            method: 'POST',
-            mode: 'no-cors', // Google Scripts CORS fix
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                invoice: newInvoice,
-                client: client,
-                pdfBase64: pdfBase64,
-                emailBody: getPreviewEmail()
-            })
-        });
-        // Note: with no-cors we can't check response.ok, assume success if no network error
-        alert('Invoice sent to automation queue! (Email + Drive + Sheet)');
-      } catch (e) {
-        alert('Error triggering automation: ' + e.message);
-        console.error(e);
-      } finally {
-        setIsSending(false);
-      }
-    } else if (status === 'Sent') {
-      // Fallback: Download PDF locally if no script URL
-      const client = clients.find(c => c.id === formData.clientId);
-      const doc = generateInvoicePDF(newInvoice, client);
-      doc.save(`${newInvoice.invoiceNumber}.pdf`);
-      alert('PDF downloaded. Configure Google Script in Settings to enable auto-emailing.');
+    if (!formData.clientId) {
+      setErrorMessage('Please select a client');
+      return;
     }
 
-    addInvoice(newInvoice);
-    setView('invoices');
+    setIsSaving(true);
+    setErrorMessage('');
+
+    try {
+      const total = calculateTotal();
+      const invoiceNumber = generateInvoiceNumber();
+      
+      // Don't include id - let Supabase generate UUID
+      const newInvoice = {
+        clientId: formData.clientId,
+        invoiceNumber: invoiceNumber,
+        issueDate: formData.issueDate,
+        dueDate: getDueDate(formData.issueDate, formData.paymentTerms),
+        status: status,
+        total: total,
+        subtotal: calculateSubtotal(),
+        tax: calculateTax(),
+        includeGst: formData.includeGst,
+        lineItems: formData.lineItems
+      };
+
+      // Save invoice first to get the database ID
+      const result = await addInvoice(newInvoice);
+      
+      if (!result || !result.data) {
+        throw new Error('Failed to save invoice');
+      }
+
+      const savedInvoice = result.data;
+
+      // If status is 'Sent', handle email/PDF
+      if (status === 'Sent' && googleScriptUrl) {
+        setIsSending(true);
+        const client = clients.find(c => c.id === formData.clientId);
+        
+        // Generate PDF Blob using saved invoice data
+        const doc = generateInvoicePDF(savedInvoice, client);
+        const pdfBase64 = doc.output('datauristring').split(',')[1]; // Remove "data:application/pdf;base64,"
+
+        try {
+          // Send to Google Apps Script
+          await fetch(googleScriptUrl, {
+              method: 'POST',
+              mode: 'no-cors', // Google Scripts CORS fix
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  invoice: savedInvoice,
+                  client: client,
+                  pdfBase64: pdfBase64,
+                  emailBody: getPreviewEmail()
+              })
+          });
+          // Note: with no-cors we can't check response.ok, assume success if no network error
+          alert('Invoice sent to automation queue! (Email + Drive + Sheet)');
+        } catch (e) {
+          alert('Invoice saved but error triggering automation: ' + e.message);
+          console.error(e);
+        } finally {
+          setIsSending(false);
+        }
+      } else if (status === 'Sent') {
+        // Fallback: Download PDF locally if no script URL
+        const client = clients.find(c => c.id === formData.clientId);
+        const doc = generateInvoicePDF(savedInvoice, client);
+        doc.save(`${savedInvoice.invoiceNumber}.pdf`);
+        alert('PDF downloaded. Configure Google Script in Settings to enable auto-emailing.');
+      }
+
+      setView('invoices');
+    } catch (error) {
+      setErrorMessage(error.message || 'Failed to save invoice. Please try again.');
+      console.error('Error saving invoice:', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const getPreviewEmail = () => {
     const client = clients.find(c => c.id === formData.clientId);
     if (!client) return "Please select a client first.";
     
-    let body = emailTemplate;
-    body = body.replace('[Contact Name]', client.contactName);
-    body = body.replace('[Invoice Number]', 'INV-####');
-    body = body.replace('[Total]', `$${calculateTotal()}`);
+    // Generate preview invoice number for display
+    const previewInvoiceNumber = generateInvoiceNumber();
+    
+    let body = emailTemplate || '';
+    body = body.replace(/\[Contact Name\]/g, client.contactName || client.name);
+    body = body.replace(/\[Invoice Number\]/g, previewInvoiceNumber);
+    body = body.replace(/\[Total\]/g, `$${calculateTotal().toFixed(2)}`);
     return body;
   };
 
   return (
     <div className="bg-white p-8 rounded-xl shadow-lg max-w-4xl mx-auto relative">
       <h2 className="text-2xl font-bold mb-6">New Invoice</h2>
+      {errorMessage && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {errorMessage}
+        </div>
+      )}
       
       <div className="grid grid-cols-2 gap-6 mb-8">
         <div>
@@ -206,17 +252,31 @@ export default function InvoiceForm({ setView }) {
       </div>
 
       <div className="flex justify-between items-center pt-4 border-t">
-        <button onClick={() => setView('invoices')} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">Cancel</button>
+        <button 
+          onClick={() => setView('invoices')} 
+          disabled={isSaving || isSending}
+          className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50"
+        >
+          Cancel
+        </button>
         <div className="flex gap-3">
-            <button onClick={() => handleSave('Draft')} className="flex items-center px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">
-                <Save size={18} className="mr-2"/> Save Draft
+            <button 
+              onClick={() => handleSave('Draft')} 
+              disabled={isSaving || isSending}
+              className="flex items-center px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                <Save size={18} className="mr-2"/> {isSaving ? 'Saving...' : 'Save Draft'}
             </button>
             <button 
                 onClick={() => {
-                    if(!formData.clientId) return alert('Select a client');
+                    if(!formData.clientId) {
+                      setErrorMessage('Please select a client');
+                      return;
+                    }
                     setShowEmailModal(true);
                 }} 
-                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                disabled={isSaving || isSending}
+                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 <Send size={18} className="mr-2"/> Send Invoice
             </button>

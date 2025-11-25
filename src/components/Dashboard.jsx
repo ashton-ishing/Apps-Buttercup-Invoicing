@@ -211,8 +211,8 @@ export default function Dashboard() {
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <KPICard title="Total Revenue" amount={totalRevenue} icon={DollarSign} trend={12} />
-        <KPICard title="Total Expenses" amount={totalExpenses} icon={TrendingUp} trend={-5} />
+        <KPICard title="Total Revenue" amount={totalRevenue} icon={DollarSign} />
+        <KPICard title="Total Expenses" amount={totalExpenses} icon={TrendingUp} />
         <KPICard title="Outstanding" amount={outstanding} icon={Clock} />
         <KPICard title="Overdue" amount={overdue} icon={AlertCircle} />
       </div>

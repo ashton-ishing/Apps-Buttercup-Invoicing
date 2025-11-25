@@ -14,9 +14,9 @@
 
 const CONFIG = {
   // REPLACE THESE WITH YOUR ACTUAL IDs
-  FOLDER_ID: 'YOUR_DRIVE_FOLDER_ID', 
-  SHEET_ID: 'YOUR_SPREADSHEET_ID',
-  SHEET_NAME: 'Invoices',
+  FOLDER_ID: '1_NP2Ecd3MdA-xD_K1XIgMHN_spd8ZWTR', 
+  SHEET_ID: '17XyRrnerxzwXPAb54koAZIo94dc4ETRu3-TyGOK7eKg',
+  SHEET_NAME: 'FY26 Invoices',
   // OPTIONAL: Set this if you want to send from an alias (must be verified in Gmail settings)
   EMAIL_ALIAS: 'billing@buttercup.digital' 
 };

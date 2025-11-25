@@ -1,46 +1,62 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
-import { mockClients, mockInvoices, mockExpenses, mockTransactions } from './mockData';
+import { useSession } from '@clerk/clerk-react';
+import { createClerkSupabaseClient, supabase as publicSupabase } from './supabaseClient';
 
 const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
+  const { session } = useSession();
+  const [supabase, setSupabase] = useState(publicSupabase);
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [recurringInvoices, setRecurringInvoices] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [emailTemplate, setEmailTemplate] = useState('');
+  const [googleScriptUrl, setGoogleScriptUrl] = useState('');
+  const [dateRange, setDateRange] = useState('all');
+
+  useEffect(() => {
+    const setupClient = async () => {
+      if (session) {
+        const client = await createClerkSupabaseClient(session);
+        setSupabase(client);
+      } else {
+        setSupabase(publicSupabase);
+      }
+    };
+    setupClient();
+  }, [session]);
 
   // Fetch Initial Data
   useEffect(() => {
+    if (!session) return; // Wait for session
+
     const fetchData = async () => {
       setLoading(true);
       
       // Ideally these would be parallel, but sequential is fine for now
       const { data: cl } = await supabase.from('clients').select('*');
-      if (cl && cl.length > 0) setClients(cl);
-      else setClients(mockClients); // Fallback if empty
+      if (cl) setClients(cl);
 
       const { data: inv } = await supabase.from('invoices').select('*');
-      if (inv && inv.length > 0) setInvoices(inv);
+      if (inv) setInvoices(inv);
       
       const { data: rec } = await supabase.from('recurring_invoices').select('*');
       if (rec) setRecurringInvoices(rec);
 
       const { data: exp } = await supabase.from('expenses').select('*');
-      if (exp && exp.length > 0) setExpenses(exp);
-      else setExpenses(mockExpenses);
+      if (exp) setExpenses(exp);
 
       const { data: tx } = await supabase.from('transactions').select('*');
-      if (tx && tx.length > 0) setTransactions(tx);
-      else setTransactions(mockTransactions);
+      if (tx) setTransactions(tx);
 
       setLoading(false);
     };
 
     fetchData();
-  }, []);
+  }, [supabase, session]);
 
   const addInvoice = async (invoice) => {
     const { error } = await supabase.from('invoices').insert([invoice]);
@@ -79,6 +95,7 @@ export const AppProvider = ({ children }) => {
 
   return (
     <AppContext.Provider value={{
+      supabase, // Expose the authenticated client
       clients, setClients, addClient, removeClient,
       invoices, setInvoices, addInvoice,
       recurringInvoices, setRecurringInvoices, addRecurringInvoice,

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './AppContext';
 import { supabase } from './supabaseClient';
+import { SignedIn, SignedOut, useClerk, UserButton } from "@clerk/clerk-react";
 import Dashboard from './components/Dashboard';
 import InvoiceForm from './components/InvoiceForm';
 import RecurringInvoiceForm from './components/RecurringInvoiceForm';
@@ -163,29 +164,11 @@ const SettingsView = () => {
 
 const MainApp = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [session, setSession] = useState(null);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const { signOut } = useClerk();
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await signOut();
   };
-
-  if (!session) {
-    return <Auth />;
-  }
 
   const renderContent = () => {
     switch(activeTab) {
@@ -220,13 +203,10 @@ const MainApp = () => {
   return (
     <div className="min-h-screen bg-[#FDFDFD] flex text-gray-800 font-sans">
       <aside className="w-64 bg-[#F8F9FA] fixed h-full z-10 flex flex-col">
-        <div className="p-8 mb-2">
-          <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2 tracking-tight">
-            <div className="w-6 h-6 bg-gray-900 rounded-lg flex items-center justify-center">
-              <span className="text-white text-xs font-bold">B</span>
-            </div>
-            Butter
-          </h1>
+        <div className="p-6 mb-2">
+          <div className="flex items-center gap-3">
+             <img src="https://7ui4aegvhooyq7am.public.blob.vercel-storage.com/buttercup-logo.png" alt="Buttercup Logo" className="h-10 w-auto object-contain" />
+          </div>
         </div>
         <nav className="px-4 space-y-1 flex-1">
           <NavItem id="dashboard" icon={LayoutDashboard} label="Dashboard" />
@@ -259,7 +239,12 @@ const MainApp = () => {
 export default function App() {
   return (
     <AppProvider>
-      <MainApp />
+      <SignedIn>
+        <MainApp />
+      </SignedIn>
+      <SignedOut>
+        <Auth />
+      </SignedOut>
     </AppProvider>
   );
 }

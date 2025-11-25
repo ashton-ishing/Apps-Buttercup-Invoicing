@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
-import { Plus, Send, Save, X } from 'lucide-react';
+import { Plus, Send, Save, X, Download, Loader } from 'lucide-react';
+import { generateInvoicePDF } from '../utils/pdfGenerator';
 
 export default function InvoiceForm({ setView }) {
-  const { clients, addInvoice, emailTemplate } = useApp();
+  const { clients, addInvoice, emailTemplate, googleScriptUrl } = useApp();
   const [showEmailModal, setShowEmailModal] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   
   const [formData, setFormData] = useState({
     clientId: '',
     issueDate: new Date().toISOString().split('T')[0],
     paymentTerms: 14,
+    includeGst: false,
     lineItems: [{ category: 'Web Design', description: '', quantity: 1, unitPrice: 0 }]
   });
 
@@ -19,9 +22,11 @@ export default function InvoiceForm({ setView }) {
     return result.toISOString().split('T')[0];
   };
 
-  const calculateTotal = () => formData.lineItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+  const calculateSubtotal = () => formData.lineItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+  const calculateTax = () => formData.includeGst ? calculateSubtotal() * 0.1 : 0;
+  const calculateTotal = () => calculateSubtotal() + calculateTax();
 
-  const handleSave = (status) => {
+  const handleSave = async (status) => {
     const total = calculateTotal();
     const newInvoice = {
       id: `inv${Date.now()}`,
@@ -31,8 +36,49 @@ export default function InvoiceForm({ setView }) {
       dueDate: getDueDate(formData.issueDate, formData.paymentTerms),
       status: status,
       total: total,
+      subtotal: calculateSubtotal(),
+      tax: calculateTax(),
+      includeGst: formData.includeGst,
       lineItems: formData.lineItems
     };
+
+    if (status === 'Sent' && googleScriptUrl) {
+      setIsSending(true);
+      const client = clients.find(c => c.id === formData.clientId);
+      
+      // Generate PDF Blob
+      const doc = generateInvoicePDF(newInvoice, client);
+      const pdfBase64 = doc.output('datauristring').split(',')[1]; // Remove "data:application/pdf;base64,"
+
+      try {
+        // Send to Google Apps Script
+        await fetch(googleScriptUrl, {
+            method: 'POST',
+            mode: 'no-cors', // Google Scripts CORS fix
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                invoice: newInvoice,
+                client: client,
+                pdfBase64: pdfBase64,
+                emailBody: getPreviewEmail()
+            })
+        });
+        // Note: with no-cors we can't check response.ok, assume success if no network error
+        alert('Invoice sent to automation queue! (Email + Drive + Sheet)');
+      } catch (e) {
+        alert('Error triggering automation: ' + e.message);
+        console.error(e);
+      } finally {
+        setIsSending(false);
+      }
+    } else if (status === 'Sent') {
+      // Fallback: Download PDF locally if no script URL
+      const client = clients.find(c => c.id === formData.clientId);
+      const doc = generateInvoicePDF(newInvoice, client);
+      doc.save(`${newInvoice.invoiceNumber}.pdf`);
+      alert('PDF downloaded. Configure Google Script in Settings to enable auto-emailing.');
+    }
+
     addInvoice(newInvoice);
     setView('invoices');
   };
@@ -80,6 +126,12 @@ export default function InvoiceForm({ setView }) {
 
       <div className="mb-6">
         <h3 className="font-semibold text-gray-700 mb-2">Line Items</h3>
+        <div className="flex gap-2 mb-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <div className="w-1/4">Category</div>
+          <div className="flex-1">Description</div>
+          <div className="w-20">Quantity</div>
+          <div className="w-24">Price</div>
+        </div>
         <div className="space-y-3">
           {formData.lineItems.map((item, idx) => (
             <div key={idx} className="flex items-start gap-2 p-3 bg-gray-50 rounded-md border border-gray-200">
@@ -133,12 +185,24 @@ export default function InvoiceForm({ setView }) {
             </div>
           ))}
         </div>
-        <button 
-            onClick={() => setFormData({...formData, lineItems: [...formData.lineItems, { category: 'Web Design', description: '', quantity: 1, unitPrice: 0 }]})}
-            className="mt-3 text-sm text-blue-600 flex items-center font-medium hover:underline"
-        >
-            <Plus size={14} className="mr-1"/> Add Line Item
-        </button>
+        <div className="flex justify-between items-center mt-3">
+          <button 
+              onClick={() => setFormData({...formData, lineItems: [...formData.lineItems, { category: 'Web Design', description: '', quantity: 1, unitPrice: 0 }]})}
+              className="text-sm text-blue-600 flex items-center font-medium hover:underline"
+          >
+              <Plus size={14} className="mr-1"/> Add Line Item
+          </button>
+          <div className="flex items-center">
+             <input 
+                type="checkbox" 
+                id="includeGst" 
+                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                checked={formData.includeGst}
+                onChange={e => setFormData({...formData, includeGst: e.target.checked})}
+             />
+             <label htmlFor="includeGst" className="ml-2 text-sm font-medium text-gray-700">Include GST (10%)</label>
+          </div>
+        </div>
       </div>
 
       <div className="flex justify-between items-center pt-4 border-t">
@@ -170,9 +234,14 @@ export default function InvoiceForm({ setView }) {
                     {getPreviewEmail()}
                 </div>
                 <div className="flex justify-end gap-2">
-                    <button onClick={() => setShowEmailModal(false)} className="px-4 py-2 text-sm text-gray-600">Back</button>
-                    <button onClick={() => handleSave('Sent')} className="px-4 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700">
-                        Confirm & Send
+                    <button onClick={() => setShowEmailModal(false)} className="px-4 py-2 text-sm text-gray-600" disabled={isSending}>Back</button>
+                    <button 
+                        onClick={() => handleSave('Sent')} 
+                        disabled={isSending}
+                        className="px-4 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2"
+                    >
+                        {isSending ? <Loader size={16} className="animate-spin" /> : <Send size={16} />}
+                        {isSending ? 'Sending...' : 'Confirm & Send'}
                     </button>
                 </div>
             </div>

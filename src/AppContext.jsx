@@ -87,6 +87,30 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  const updateInvoiceStatus = async (invoiceId, newStatus) => {
+    try {
+      const { data, error } = await supabase
+        .from('invoices')
+        .update({ status: newStatus })
+        .eq('id', invoiceId)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error updating invoice status:', error);
+        throw new Error(error.message || 'Failed to update invoice status');
+      }
+      
+      if (data) {
+        setInvoices(invoices.map(inv => inv.id === invoiceId ? data : inv));
+        return { success: true, data };
+      }
+    } catch (error) {
+      console.error('Error updating invoice status:', error);
+      throw error;
+    }
+  };
+
   const addRecurringInvoice = async (invoice) => {
     try {
       // Remove id if provided - let Supabase generate UUID
@@ -104,6 +128,30 @@ export const AppProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Error adding recurring invoice:', error);
+      throw error;
+    }
+  };
+
+  const updateRecurringInvoice = async (invoiceId, updates) => {
+    try {
+      const { data, error } = await supabase
+        .from('recurring_invoices')
+        .update(updates)
+        .eq('id', invoiceId)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error updating recurring invoice:', error);
+        throw new Error(error.message || 'Failed to update recurring invoice');
+      }
+      
+      if (data) {
+        setRecurringInvoices(recurringInvoices.map(inv => inv.id === invoiceId ? data : inv));
+        return { success: true, data };
+      }
+    } catch (error) {
+      console.error('Error updating recurring invoice:', error);
       throw error;
     }
   };
@@ -207,8 +255,8 @@ export const AppProvider = ({ children }) => {
     <AppContext.Provider value={{
       supabase, // Expose the authenticated client
       clients, setClients, addClient, removeClient,
-      invoices, setInvoices, addInvoice,
-      recurringInvoices, setRecurringInvoices, addRecurringInvoice,
+      invoices, setInvoices, addInvoice, updateInvoiceStatus,
+      recurringInvoices, setRecurringInvoices, addRecurringInvoice, updateRecurringInvoice,
       expenses, setExpenses,
       transactions, setTransactions, reconcileTransaction,
       emailTemplate, setEmailTemplate,

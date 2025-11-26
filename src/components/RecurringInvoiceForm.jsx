@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../AppContext';
 import { Plus, Save, Calendar } from 'lucide-react';
 
-export default function RecurringInvoiceForm({ setView }) {
-  const { clients, addRecurringInvoice } = useApp();
+export default function RecurringInvoiceForm({ setView, invoiceToEdit }) {
+  const { clients, addRecurringInvoice, updateRecurringInvoice } = useApp();
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const isEditing = !!invoiceToEdit;
   
   const [formData, setFormData] = useState({
     clientId: '',
@@ -15,6 +16,22 @@ export default function RecurringInvoiceForm({ setView }) {
     includeGst: false,
     lineItems: [{ category: 'Web Design', description: '', quantity: 1, unitPrice: 0 }]
   });
+
+  // Load invoice data if editing
+  useEffect(() => {
+    if (invoiceToEdit) {
+      setFormData({
+        clientId: invoiceToEdit.clientId || '',
+        startDate: invoiceToEdit.startDate || new Date().toISOString().split('T')[0],
+        frequency: invoiceToEdit.frequency || 'Monthly',
+        paymentTerms: invoiceToEdit.paymentTerms || 14,
+        includeGst: invoiceToEdit.includeGst || false,
+        lineItems: invoiceToEdit.lineItems && invoiceToEdit.lineItems.length > 0 
+          ? invoiceToEdit.lineItems 
+          : [{ category: 'Web Design', description: '', quantity: 1, unitPrice: 0 }]
+      });
+    }
+  }, [invoiceToEdit]);
 
   const calculateSubtotal = () => formData.lineItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
   const calculateTax = () => formData.includeGst ? calculateSubtotal() * 0.1 : 0;
@@ -32,25 +49,31 @@ export default function RecurringInvoiceForm({ setView }) {
     try {
       const total = calculateTotal();
       
-      // Don't include id - let Supabase generate UUID
-      const newRecurring = {
+      const recurringData = {
         clientId: formData.clientId,
         startDate: formData.startDate,
         frequency: formData.frequency,
         paymentTerms: formData.paymentTerms,
         nextRunDate: formData.startDate, // simplified for now
-        status: 'Active',
         total: total,
         subtotal: calculateSubtotal(),
         tax: calculateTax(),
         includeGst: formData.includeGst,
         lineItems: formData.lineItems
       };
+
+      if (isEditing) {
+        // Update existing invoice
+        await updateRecurringInvoice(invoiceToEdit.id, recurringData);
+      } else {
+        // Create new invoice
+        recurringData.status = 'Active';
+        await addRecurringInvoice(recurringData);
+      }
       
-      await addRecurringInvoice(newRecurring);
       setView('recurring-invoices'); // Go back to recurring list
     } catch (error) {
-      setErrorMessage(error.message || 'Failed to save recurring invoice. Please try again.');
+      setErrorMessage(error.message || `Failed to ${isEditing ? 'update' : 'save'} recurring invoice. Please try again.`);
       console.error('Error saving recurring invoice:', error);
     } finally {
       setIsSaving(false);
@@ -63,7 +86,7 @@ export default function RecurringInvoiceForm({ setView }) {
         <div className="p-2 bg-purple-100 rounded-lg text-purple-700">
           <Calendar size={24} />
         </div>
-        <h2 className="text-2xl font-bold">New Recurring Invoice</h2>
+        <h2 className="text-2xl font-bold">{isEditing ? 'Edit Recurring Invoice' : 'New Recurring Invoice'}</h2>
       </div>
       {errorMessage && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
@@ -201,7 +224,7 @@ export default function RecurringInvoiceForm({ setView }) {
                 disabled={isSaving}
                 className="flex items-center px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-                <Save size={18} className="mr-2"/> {isSaving ? 'Saving...' : 'Save Recurring Profile'}
+                <Save size={18} className="mr-2"/> {isSaving ? (isEditing ? 'Updating...' : 'Saving...') : (isEditing ? 'Update Recurring Profile' : 'Save Recurring Profile')}
             </button>
         </div>
       </div>

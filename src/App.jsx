@@ -9,13 +9,19 @@ import ClientsList from './components/ClientsList';
 import TaxPack from './components/TaxPack';
 import WiseFeed from './components/WiseFeed';
 import Auth from './components/Auth';
-import { LayoutDashboard, FileText, CreditCard, Settings, PlusCircle, Repeat, Users, FileSpreadsheet, LogOut } from 'lucide-react';
+import { LayoutDashboard, FileText, CreditCard, Settings, PlusCircle, Repeat, Users, FileSpreadsheet, LogOut, Edit, Eye, ChevronDown } from 'lucide-react';
 import clsx from 'clsx';
 
 const RecurringInvoiceList = ({ setView }) => {
   const { recurringInvoices, clients } = useApp();
   
   const getClientName = (id) => clients.find(c => c.id === id)?.name || 'Unknown';
+
+  const handleEdit = (invoice) => {
+    if (typeof setView === 'function') {
+      setView({ view: 'edit-recurring-invoice', invoice });
+    }
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200">
@@ -45,6 +51,7 @@ const RecurringInvoiceList = ({ setView }) => {
               <th className="text-left p-4">Start Date</th>
               <th className="text-right p-4">Amount</th>
               <th className="text-center p-4">Status</th>
+              <th className="text-center p-4">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -59,6 +66,15 @@ const RecurringInvoiceList = ({ setView }) => {
                     {inv.status}
                   </span>
                 </td>
+                <td className="p-4 text-center">
+                  <button
+                    onClick={() => handleEdit(inv)}
+                    className="text-purple-600 hover:text-purple-800 p-2 hover:bg-purple-50 rounded-full transition-colors"
+                    title="Edit recurring invoice"
+                  >
+                    <Edit size={16} />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -69,15 +85,57 @@ const RecurringInvoiceList = ({ setView }) => {
 };
 
 const InvoiceList = ({ setView }) => {
-  const { invoices, clients } = useApp();
+  const { invoices, clients, updateInvoiceStatus } = useApp();
+  const [updatingStatus, setUpdatingStatus] = useState({});
   
   const getClientName = (id) => clients.find(c => c.id === id)?.name || 'Unknown';
+  const getClient = (id) => clients.find(c => c.id === id);
+  
   const getStatusColor = (status) => {
     switch(status) {
       case 'Paid': return 'bg-green-100 text-green-800';
       case 'Overdue': return 'bg-red-100 text-red-800';
       case 'Sent': return 'bg-blue-100 text-blue-800';
       default: return 'bg-yellow-100 text-yellow-800';
+    }
+  };
+
+  const handleViewPDF = async (invoice) => {
+    try {
+      const client = getClient(invoice.clientId);
+      if (!client) {
+        alert('Client not found');
+        return;
+      }
+
+      // Dynamically import PDF generator
+      const { generateInvoicePDF } = await import('./utils/pdfGenerator');
+      
+      // Generate PDF
+      const doc = await generateInvoicePDF(invoice, client);
+      
+      // Open PDF in new window
+      const pdfBlob = doc.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      window.open(pdfUrl, '_blank');
+      
+      // Clean up the URL after a delay
+      setTimeout(() => URL.revokeObjectURL(pdfUrl), 100);
+    } catch (error) {
+      alert('Error generating PDF: ' + error.message);
+      console.error('PDF generation error:', error);
+    }
+  };
+
+  const handleStatusChange = async (invoiceId, newStatus) => {
+    setUpdatingStatus({ ...updatingStatus, [invoiceId]: true });
+    try {
+      await updateInvoiceStatus(invoiceId, newStatus);
+    } catch (error) {
+      alert('Error updating status: ' + error.message);
+      console.error('Status update error:', error);
+    } finally {
+      setUpdatingStatus({ ...updatingStatus, [invoiceId]: false });
     }
   };
 
@@ -102,6 +160,7 @@ const InvoiceList = ({ setView }) => {
             <th className="text-left p-4">Date</th>
             <th className="text-right p-4">Total</th>
             <th className="text-center p-4">Status</th>
+            <th className="text-center p-4">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -112,9 +171,30 @@ const InvoiceList = ({ setView }) => {
               <td className="p-4 text-gray-500 text-sm">{inv.dueDate}</td>
               <td className="p-4 text-right font-mono text-gray-700">${inv.total}</td>
               <td className="p-4 text-center">
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(inv.status)}`}>
-                  {inv.status}
-                </span>
+                <div className="flex items-center justify-center gap-2">
+                  <select
+                    value={inv.status}
+                    onChange={(e) => handleStatusChange(inv.id, e.target.value)}
+                    disabled={updatingStatus[inv.id]}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold border-0 cursor-pointer focus:ring-2 focus:ring-blue-500 focus:outline-none ${getStatusColor(inv.status)} ${updatingStatus[inv.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <option value="Draft">Draft</option>
+                    <option value="Sent">Sent</option>
+                    <option value="Paid">Paid</option>
+                    <option value="Overdue">Overdue</option>
+                  </select>
+                </div>
+              </td>
+              <td className="p-4 text-center">
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => handleViewPDF(inv)}
+                    className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded-full transition-colors"
+                    title="View PDF"
+                  >
+                    <Eye size={16} />
+                  </button>
+                </div>
               </td>
             </tr>
           ))}
@@ -195,19 +275,31 @@ const SettingsView = () => {
 
 const MainApp = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [editingInvoice, setEditingInvoice] = useState(null);
   const { signOut } = useClerk();
 
   const handleLogout = async () => {
     await signOut();
   };
 
+  const handleViewChange = (view) => {
+    if (typeof view === 'object' && view.view === 'edit-recurring-invoice') {
+      setEditingInvoice(view.invoice);
+      setActiveTab('edit-recurring-invoice');
+    } else {
+      setEditingInvoice(null);
+      setActiveTab(view);
+    }
+  };
+
   const renderContent = () => {
     switch(activeTab) {
       case 'dashboard': return <Dashboard />;
-      case 'invoices': return <InvoiceList setView={setActiveTab} />;
-      case 'create-invoice': return <InvoiceForm setView={setActiveTab} />;
-      case 'recurring-invoices': return <RecurringInvoiceList setView={setActiveTab} />;
-      case 'create-recurring-invoice': return <RecurringInvoiceForm setView={setActiveTab} />;
+      case 'invoices': return <InvoiceList setView={handleViewChange} />;
+      case 'create-invoice': return <InvoiceForm setView={handleViewChange} />;
+      case 'recurring-invoices': return <RecurringInvoiceList setView={handleViewChange} />;
+      case 'create-recurring-invoice': return <RecurringInvoiceForm setView={handleViewChange} />;
+      case 'edit-recurring-invoice': return <RecurringInvoiceForm setView={handleViewChange} invoiceToEdit={editingInvoice} />;
       case 'clients': return <ClientsList />;
       case 'tax-pack': return <TaxPack />;
       case 'wise': return <WiseFeed />;
@@ -221,7 +313,7 @@ const MainApp = () => {
       onClick={() => setActiveTab(id)}
       className={clsx(
         "w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 ease-in-out",
-        activeTab === id || (['invoices', 'create-invoice', 'recurring-invoices', 'create-recurring-invoice'].includes(activeTab) && id === 'invoices') 
+        activeTab === id || (['invoices', 'create-invoice', 'recurring-invoices', 'create-recurring-invoice', 'edit-recurring-invoice'].includes(activeTab) && id === 'invoices') 
           ? "bg-white text-gray-900 shadow-sm ring-1 ring-gray-200/50" 
           : "text-gray-500 hover:text-gray-900 hover:bg-gray-100/50"
       )}

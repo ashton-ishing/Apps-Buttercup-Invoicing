@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { Plus, Send, Save, X, Download, Loader } from 'lucide-react';
-import { generateInvoicePDF } from '../utils/pdfGenerator';
 
 export default function InvoiceForm({ setView }) {
   const { clients, addInvoice, emailTemplate, googleScriptUrl } = useApp();
@@ -79,11 +78,13 @@ export default function InvoiceForm({ setView }) {
         setIsSending(true);
         const client = clients.find(c => c.id === formData.clientId);
         
-        // Generate PDF Blob using saved invoice data
-        const doc = generateInvoicePDF(savedInvoice, client);
-        const pdfBase64 = doc.output('datauristring').split(',')[1]; // Remove "data:application/pdf;base64,"
-
         try {
+          // Dynamically import PDF generator
+          const { generateInvoicePDF } = await import('../utils/pdfGenerator');
+          // Generate PDF Blob using saved invoice data (await the async function)
+          const doc = await generateInvoicePDF(savedInvoice, client);
+          const pdfBase64 = doc.output('datauristring').split(',')[1]; // Remove "data:application/pdf;base64,"
+
           // Send to Google Apps Script
           await fetch(googleScriptUrl, {
               method: 'POST',
@@ -106,10 +107,16 @@ export default function InvoiceForm({ setView }) {
         }
       } else if (status === 'Sent') {
         // Fallback: Download PDF locally if no script URL
-        const client = clients.find(c => c.id === formData.clientId);
-        const doc = generateInvoicePDF(savedInvoice, client);
-        doc.save(`${savedInvoice.invoiceNumber}.pdf`);
-        alert('PDF downloaded. Configure Google Script in Settings to enable auto-emailing.');
+        try {
+          const client = clients.find(c => c.id === formData.clientId);
+          const { generateInvoicePDF } = await import('../utils/pdfGenerator');
+          const doc = await generateInvoicePDF(savedInvoice, client);
+          doc.save(`${savedInvoice.invoiceNumber}.pdf`);
+          alert('PDF downloaded. Configure Google Script in Settings to enable auto-emailing.');
+        } catch (e) {
+          alert('Error generating PDF: ' + e.message);
+          console.error(e);
+        }
       }
 
       setView('invoices');

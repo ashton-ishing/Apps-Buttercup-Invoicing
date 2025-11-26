@@ -20,9 +20,16 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     const setupClient = async () => {
       if (session) {
-        const client = await createClerkSupabaseClient(session);
-        setSupabase(client);
+        try {
+          const client = await createClerkSupabaseClient(session);
+          setSupabase(client);
+          console.log('Supabase client authenticated with Clerk session');
+        } catch (error) {
+          console.error('Failed to setup authenticated Supabase client:', error);
+          setSupabase(publicSupabase);
+        }
       } else {
+        console.log('No Clerk session, using public Supabase client');
         setSupabase(publicSupabase);
       }
     };
@@ -112,13 +119,37 @@ export const AppProvider = ({ children }) => {
   
   const addClient = async (client) => {
     try {
-      // Remove id if provided - let Supabase generate UUID
+      // Prepare client data - only include fields that exist in schema
+      // Remove id if present, let Supabase generate UUID
       const { id, ...clientData } = client;
-      const { data, error } = await supabase.from('clients').insert([clientData]).select().single();
+      
+      // Ensure we only send valid fields
+      // Convert empty strings to null for optional fields
+      const insertData = {
+        name: clientData.name?.trim() || '',
+        contactName: clientData.contactName?.trim() || null,
+        email: clientData.email?.trim() || null
+      };
+      
+      // Validate required fields
+      if (!insertData.name) {
+        throw new Error('Company name is required');
+      }
+      
+      console.log('Inserting client data:', insertData);
+      
+      const { data, error } = await supabase
+        .from('clients')
+        .insert([insertData])
+        .select()
+        .single();
       
       if (error) {
-        console.error('Error adding client:', error);
-        throw new Error(error.message || 'Failed to add client');
+        console.error('Supabase error:', error);
+        console.error('Error code:', error.code);
+        console.error('Error details:', error.details);
+        console.error('Error hint:', error.hint);
+        throw new Error(error.message || error.details || 'Failed to add client');
       }
       
       if (data) {

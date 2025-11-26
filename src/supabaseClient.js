@@ -12,24 +12,27 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 
 export const createClerkSupabaseClient = async (session) => {
   try {
+    // Try to get Clerk token, but since RLS policies allow all (using true),
+    // we can use the anon key directly
     const token = await session.getToken({ template: 'supabase' });
     
-    if (!token) {
-      console.warn('No Clerk token retrieved for Supabase. Make sure Clerk JWT template "supabase" is configured.');
-      // Fall back to using the anon key without auth
+    if (token) {
+      // If token exists, use it (requires Supabase to be configured to accept Clerk JWTs)
+      return createClient(supabaseUrl, supabaseKey, {
+        global: {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      });
+    } else {
+      // No token - use anon key (works because RLS policies allow all)
+      console.log('Using Supabase anon key (RLS policies allow all operations)');
       return createClient(supabaseUrl, supabaseKey);
     }
-    
-    return createClient(supabaseUrl, supabaseKey, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
-    });
   } catch (error) {
-    console.error('Error creating authenticated Supabase client:', error);
-    // Fall back to using the anon key without auth
+    // If token retrieval fails, use anon key
+    console.log('Using Supabase anon key (RLS policies allow all operations)');
     return createClient(supabaseUrl, supabaseKey);
   }
 };

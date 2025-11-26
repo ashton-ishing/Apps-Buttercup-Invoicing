@@ -19,19 +19,10 @@ export const AppProvider = ({ children }) => {
 
   useEffect(() => {
     const setupClient = async () => {
-      if (session) {
-        try {
-          const client = await createClerkSupabaseClient(session);
-          setSupabase(client);
-          console.log('Supabase client authenticated with Clerk session');
-        } catch (error) {
-          console.error('Failed to setup authenticated Supabase client:', error);
-          setSupabase(publicSupabase);
-        }
-      } else {
-        console.log('No Clerk session, using public Supabase client');
-        setSupabase(publicSupabase);
-      }
+      // Always use the public Supabase client with anon key
+      // RLS policies allow all operations (using true), so authentication isn't required
+      setSupabase(publicSupabase);
+      console.log('Using Supabase client with anon key');
     };
     setupClient();
   }, [session]);

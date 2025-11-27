@@ -10,6 +10,7 @@ const DateRangeSelector = () => {
   const [selectedMonths, setSelectedMonths] = useState([]);
 
   const options = [
+    { label: 'All Time', value: 'all' },
     { label: 'Last 30 Days', value: 30 },
     { label: 'Last 90 Days', value: 90 },
     { label: 'Last 120 Days', value: 120 },
@@ -63,7 +64,7 @@ const DateRangeSelector = () => {
         }}
         className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 bg-white px-3 py-2 rounded-lg border border-gray-200 shadow-sm hover:border-gray-300 transition-all"
       >
-        {dateRange.label}
+        {dateRange?.label || 'All Time'}
         <ChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       
@@ -166,6 +167,11 @@ export default function Dashboard() {
   const { invoices, expenses, dateRange } = useApp();
 
   const filterByDate = (items, dateField) => {
+    // Handle initial state where dateRange is 'all' or not an object
+    if (!dateRange || dateRange === 'all' || typeof dateRange !== 'object' || dateRange.value === 'all') {
+      return items; // Return all items if no date range is set
+    }
+    
     if (dateRange.value === 'custom-months' && dateRange.selectedMonths) {
       return items.filter(item => {
         const itemDate = new Date(item[dateField]);
@@ -182,10 +188,18 @@ export default function Dashboard() {
       });
     }
     
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - dateRange.value);
+    // Handle numeric date range values
+    if (typeof dateRange.value === 'number') {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - dateRange.value);
+      return items.filter(item => {
+        const itemDate = new Date(item[dateField]);
+        return itemDate >= cutoff;
+      });
+    }
     
-    return items.filter(item => new Date(item[dateField]) >= cutoff);
+    // Default: return all items
+    return items;
   };
 
   const filteredInvoices = filterByDate(invoices, 'issueDate');

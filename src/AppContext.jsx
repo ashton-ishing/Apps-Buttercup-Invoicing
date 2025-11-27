@@ -15,7 +15,7 @@ export const AppProvider = ({ children }) => {
   const [transactions, setTransactions] = useState([]);
   const [emailTemplate, setEmailTemplate] = useState('');
   const [googleScriptUrl, setGoogleScriptUrl] = useState('https://script.google.com/macros/s/AKfycbwIfiDx1xcbDUSMSp-rgh4ycoedoF19kiwIozFfs3IfMAY58XSPS45Axf5jwLhrxPUuKA/exec');
-  const [dateRange, setDateRange] = useState('all');
+  const [dateRange, setDateRange] = useState({ label: 'All Time', value: 'all' });
 
   useEffect(() => {
     const setupClient = async () => {

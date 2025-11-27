@@ -83,12 +83,35 @@ serve(async (req) => {
         const dueDate = new Date(issueDate)
         dueDate.setDate(dueDate.getDate() + (recurring.paymentTerms || 14))
 
-        // Generate invoice number
-        const year = issueDate.getFullYear()
-        const month = String(issueDate.getMonth() + 1).padStart(2, '0')
-        const day = String(issueDate.getDate()).padStart(2, '0')
-        const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0')
-        const invoiceNumber = `INV-${year}${month}${day}-${random}`
+        // Generate invoice number: INV-[FIRST4LETTERS]-[SEQUENTIAL]
+        // Get first 4 letters of client name (uppercase, alphanumeric only)
+        const clientCode = client.name
+          .replace(/[^a-zA-Z0-9]/g, '') // Remove special characters
+          .substring(0, 4)
+          .toUpperCase()
+          .padEnd(4, 'X') // Pad with X if less than 4 characters
+        
+        // Find the highest sequential number for this client
+        const { data: clientInvoices } = await supabase
+          .from('invoices')
+          .select('invoiceNumber')
+          .eq('clientId', recurring.clientId)
+        
+        let maxSeq = 0
+        if (clientInvoices) {
+          clientInvoices.forEach(inv => {
+            // Parse existing invoice numbers in format INV-XXXX-####
+            const match = inv.invoiceNumber?.match(/INV-[A-Z]{4}-(\d+)/)
+            if (match) {
+              const seq = parseInt(match[1], 10)
+              if (seq > maxSeq) maxSeq = seq
+            }
+          })
+        }
+        
+        // Increment for new invoice
+        const nextSeq = maxSeq + 1
+        const invoiceNumber = `INV-${clientCode}-${nextSeq.toString().padStart(4, '0')}`
 
         // Create the invoice
         const { data: newInvoice, error: invoiceError } = await supabase

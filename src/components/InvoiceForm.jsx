@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../AppContext';
 import { Plus, Send, Save, X, Download, Loader } from 'lucide-react';
 
 export default function InvoiceForm({ setView }) {
-  const { clients, addInvoice, emailTemplate, googleScriptUrl } = useApp();
+  const { clients, addInvoice, emailTemplate, googleScriptUrl, generateInvoiceNumber } = useApp();
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -27,16 +27,6 @@ export default function InvoiceForm({ setView }) {
   const calculateTax = () => formData.includeGst ? calculateSubtotal() * 0.1 : 0;
   const calculateTotal = () => calculateSubtotal() + calculateTax();
 
-  const generateInvoiceNumber = () => {
-    // Generate invoice number based on current date: INV-YYYYMMDD-XXXX
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    return `INV-${year}${month}${day}-${random}`;
-  };
-
   const handleSave = async (status) => {
     if (!formData.clientId) {
       setErrorMessage('Please select a client');
@@ -48,7 +38,7 @@ export default function InvoiceForm({ setView }) {
 
     try {
       const total = calculateTotal();
-      const invoiceNumber = generateInvoiceNumber();
+      const invoiceNumber = await generateInvoiceNumber(formData.clientId);
       
       // Don't include id - let Supabase generate UUID
       const newInvoice = {
@@ -97,7 +87,7 @@ export default function InvoiceForm({ setView }) {
                   invoice: savedInvoice,
                   client: client,
                   pdfBase64: pdfBase64,
-                  emailBody: getPreviewEmail()
+                  emailBody: getPreviewEmail(savedInvoice.invoiceNumber) // Use actual saved invoice number
               })
           });
           
@@ -134,16 +124,34 @@ export default function InvoiceForm({ setView }) {
     }
   };
 
-  const getPreviewEmail = () => {
+  const [previewInvoiceNumber, setPreviewInvoiceNumber] = useState('');
+
+  // Generate preview invoice number when client is selected
+  useEffect(() => {
+    if (formData.clientId && generateInvoiceNumber) {
+      generateInvoiceNumber(formData.clientId).then(num => {
+        setPreviewInvoiceNumber(num);
+      }).catch(() => {
+        // Fallback if generation fails
+        const client = clients.find(c => c.id === formData.clientId);
+        if (client) {
+          const clientCode = client.name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 4).toUpperCase().padEnd(4, 'X');
+          setPreviewInvoiceNumber(`INV-${clientCode}-0001`);
+        }
+      });
+    }
+  }, [formData.clientId, clients, generateInvoiceNumber]);
+
+  const getPreviewEmail = (invoiceNumberOverride = null) => {
     const client = clients.find(c => c.id === formData.clientId);
     if (!client) return "Please select a client first.";
     
-    // Generate preview invoice number for display
-    const previewInvoiceNumber = generateInvoiceNumber();
+    // Use override invoice number if provided (for actual email), otherwise use preview
+    const invoiceNumber = invoiceNumberOverride || previewInvoiceNumber || 'INV-XXXX-0001';
     
     let body = emailTemplate || '';
     body = body.replace(/\[Contact Name\]/g, client.contactName || client.name);
-    body = body.replace(/\[Invoice Number\]/g, previewInvoiceNumber);
+    body = body.replace(/\[Invoice Number\]/g, invoiceNumber);
     body = body.replace(/\[Total\]/g, `$${calculateTotal().toFixed(2)}`);
     return body;
   };

@@ -66,6 +66,39 @@ export const AppProvider = ({ children }) => {
     fetchData();
   }, [supabase, session]);
 
+  // Generate invoice number: INV-[FIRST4LETTERS]-[SEQUENTIAL]
+  const generateInvoiceNumber = async (clientId) => {
+    const client = clients.find(c => c.id === clientId);
+    if (!client) {
+      throw new Error('Client not found');
+    }
+    
+    // Get first 4 letters of client name (uppercase, alphanumeric only)
+    const clientCode = client.name
+      .replace(/[^a-zA-Z0-9]/g, '') // Remove special characters
+      .substring(0, 4)
+      .toUpperCase()
+      .padEnd(4, 'X'); // Pad with X if less than 4 characters
+    
+    // Find the highest sequential number for this client
+    const clientInvoices = invoices.filter(inv => inv.clientId === clientId);
+    let maxSeq = 0;
+    
+    clientInvoices.forEach(inv => {
+      // Parse existing invoice numbers in format INV-XXXX-####
+      const match = inv.invoiceNumber?.match(/INV-[A-Z]{4}-(\d+)/);
+      if (match) {
+        const seq = parseInt(match[1], 10);
+        if (seq > maxSeq) maxSeq = seq;
+      }
+    });
+    
+    // Increment for new invoice
+    const nextSeq = maxSeq + 1;
+    
+    return `INV-${clientCode}-${nextSeq.toString().padStart(4, '0')}`;
+  };
+
   const addInvoice = async (invoice) => {
     try {
       // Remove id if provided - let Supabase generate UUID
@@ -263,7 +296,8 @@ export const AppProvider = ({ children }) => {
       googleScriptUrl, setGoogleScriptUrl,
       dateRange, setDateRange,
       loading,
-      saveSettings
+      saveSettings,
+      generateInvoiceNumber
     }}>
       {children}
     </AppContext.Provider>

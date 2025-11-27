@@ -12,7 +12,8 @@ export default function ClientsList() {
   const [newClient, setNewClient] = useState({
     name: '',
     contactName: '',
-    email: ''
+    email: '',
+    emailName: ''
   });
 
   const calculateClientValue = (clientId) => {
@@ -36,7 +37,7 @@ export default function ClientsList() {
     try {
       // Don't include id - let Supabase generate UUID
       await addClient(newClient);
-      setNewClient({ name: '', contactName: '', email: '' });
+      setNewClient({ name: '', contactName: '', email: '', emailName: '' });
       setShowAddModal(false);
     } catch (error) {
       setErrorMessage(error.message || 'Failed to add client. Please try again.');
@@ -171,13 +172,25 @@ export default function ClientsList() {
                             disabled={isAdding}
                         />
                     </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Email Name</label>
+                        <input 
+                            type="text" 
+                            className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            value={newClient.emailName}
+                            onChange={e => setNewClient({...newClient, emailName: e.target.value})}
+                            placeholder="e.g. Ash (shortened name for emails)"
+                            disabled={isAdding}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">This shortened name will be used in invoice emails</p>
+                    </div>
                 </div>
                 <div className="flex justify-end gap-3 mt-8">
                     <button 
                         onClick={() => {
                           setShowAddModal(false);
                           setErrorMessage('');
-                          setNewClient({ name: '', contactName: '', email: '' });
+                          setNewClient({ name: '', contactName: '', email: '', emailName: '' });
                         }}
                         disabled={isAdding}
                         className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50"

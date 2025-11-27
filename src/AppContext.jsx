@@ -200,7 +200,8 @@ export const AppProvider = ({ children }) => {
       const insertData = {
         name: clientData.name?.trim() || '',
         contactName: clientData.contactName?.trim() || null,
-        email: clientData.email?.trim() || null
+        email: clientData.email?.trim() || null,
+        emailName: clientData.emailName?.trim() || null
       };
       
       // Validate required fields

@@ -17,20 +17,42 @@ export default function TaxPack() {
   const { start, end } = getFinancialYearDates(selectedYear);
 
   const isInFY = (dateString) => {
+    if (!dateString) return false;
     const date = new Date(dateString);
-    return date >= start && date <= end;
+    // Check if date is valid
+    if (isNaN(date.getTime())) return false;
+    // Set time to start of day for accurate comparison
+    date.setHours(0, 0, 0, 0);
+    const startDate = new Date(start);
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(end);
+    endDate.setHours(23, 59, 59, 999);
+    return date >= startDate && date <= endDate;
   };
 
   // Filter Data for Selected FY
-  const fyInvoices = invoices.filter(inv => isInFY(inv.issueDate) && inv.status !== 'Draft');
-  const fyExpenses = expenses.filter(exp => isInFY(exp.date));
+  const fyInvoices = invoices.filter(inv => {
+    if (!inv.issueDate) return false;
+    if (inv.status === 'Draft') return false;
+    return isInFY(inv.issueDate);
+  });
+  const fyExpenses = expenses.filter(exp => exp.date && isInFY(exp.date));
 
-  // Calculate Totals
-  const totalIncome = fyInvoices.reduce((sum, inv) => sum + inv.total, 0);
+  // Calculate Totals - ensure numeric conversion
+  const totalIncome = fyInvoices.reduce((sum, inv) => {
+    const total = parseFloat(inv.total) || 0;
+    return sum + total;
+  }, 0);
   // Use the 'tax' field if it exists (from your update), otherwise estimate 0
-  const gstCollected = fyInvoices.reduce((sum, inv) => sum + (inv.tax || 0), 0);
+  const gstCollected = fyInvoices.reduce((sum, inv) => {
+    const tax = parseFloat(inv.tax) || 0;
+    return sum + tax;
+  }, 0);
   
-  const totalExpenses = fyExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+  const totalExpenses = fyExpenses.reduce((sum, exp) => {
+    const amount = parseFloat(exp.amount) || 0;
+    return sum + amount;
+  }, 0);
   // Estimate GST on expenses (1/11th rule for AU if inclusive) or 0 if no tax field
   const gstPaid = totalExpenses / 11; 
 

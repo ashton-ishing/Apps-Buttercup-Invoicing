@@ -150,7 +150,9 @@ export default function InvoiceForm({ setView }) {
     const invoiceNumber = invoiceNumberOverride || previewInvoiceNumber || 'INV-XXXX-0001';
     
     let body = emailTemplate || '';
-    body = body.replace(/\[Contact Name\]/g, client.contactName || client.name);
+    // Use emailName if available, otherwise fall back to contactName or name
+    const emailName = client.emailName || client.contactName || client.name;
+    body = body.replace(/\[Contact Name\]/g, emailName);
     body = body.replace(/\[Invoice Number\]/g, invoiceNumber);
     body = body.replace(/\[Total\]/g, `$${calculateTotal().toFixed(2)}`);
     return body;

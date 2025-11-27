@@ -219,20 +219,20 @@ export const generateInvoicePDF = async (invoice, client) => {
   
   // Payment Summary (Bottom Right)
   const summaryX = pageWidth - rightMargin - 75;
-  const boxWidth = 75;
+  const summaryBoxWidth = 75;
   
   // Balance due (highlighted)
   const balanceDue = invoice.total;
   const balanceAmount = `$${balanceDue.toFixed(2)}`;
   doc.setFillColor(60, 60, 60);
-  doc.rect(summaryX - 2, finalY - 5, boxWidth, 8, 'F');
+  doc.rect(summaryX - 2, finalY - 5, summaryBoxWidth, 8, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFont(undefined, 'bold');
   doc.setFontSize(10);
   // Position "Balance due" on left
   doc.text(`Balance due`, summaryX, finalY);
   // Position amount on right with proper spacing
-  const amountX = summaryX + boxWidth - 4;
+  const amountX = summaryX + summaryBoxWidth - 4;
   doc.text(balanceAmount, amountX, finalY, { align: 'right' });
   
   // Payment Instructions (Bottom Left)

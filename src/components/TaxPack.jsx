@@ -96,6 +96,22 @@ export default function TaxPack() {
     return inRange;
   });
   const fyExpenses = expenses.filter(exp => exp.date && isInFY(exp.date));
+
+  // Calculate Totals - ensure numeric conversion
+  const totalIncome = fyInvoices.reduce((sum, inv) => {
+    const total = parseFloat(inv.total) || 0;
+    return sum + total;
+  }, 0);
+  // Use the 'tax' field if it exists (from your update), otherwise estimate 0
+  const gstCollected = fyInvoices.reduce((sum, inv) => {
+    const tax = parseFloat(inv.tax) || 0;
+    return sum + tax;
+  }, 0);
+  
+  const totalExpenses = fyExpenses.reduce((sum, exp) => {
+    const amount = parseFloat(exp.amount) || 0;
+    return sum + amount;
+  }, 0);
   
   // Debug filtered results
   useEffect(() => {
@@ -113,22 +129,6 @@ export default function TaxPack() {
       gstCollected
     });
   }, [selectedYear, fyInvoices, totalIncome, gstCollected, start, end]);
-
-  // Calculate Totals - ensure numeric conversion
-  const totalIncome = fyInvoices.reduce((sum, inv) => {
-    const total = parseFloat(inv.total) || 0;
-    return sum + total;
-  }, 0);
-  // Use the 'tax' field if it exists (from your update), otherwise estimate 0
-  const gstCollected = fyInvoices.reduce((sum, inv) => {
-    const tax = parseFloat(inv.tax) || 0;
-    return sum + tax;
-  }, 0);
-  
-  const totalExpenses = fyExpenses.reduce((sum, exp) => {
-    const amount = parseFloat(exp.amount) || 0;
-    return sum + amount;
-  }, 0);
   // Estimate GST on expenses (1/11th rule for AU if inclusive) or 0 if no tax field
   const gstPaid = totalExpenses / 11; 
 

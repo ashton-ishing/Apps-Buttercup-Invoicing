@@ -18,7 +18,7 @@ const CONFIG = {
   SHEET_ID: '17XyRrnerxzwXPAb54koAZIo94dc4ETRu3-TyGOK7eKg',
   SHEET_NAME: 'FY26 Invoices',
   // OPTIONAL: Set this if you want to send from an alias (must be verified in Gmail settings)
-  EMAIL_ALIAS: 'billing@buttercup.digital' 
+  EMAIL_ALIAS: 'invoicing@buttercup.digital' 
 };
 
 function doPost(e) {
@@ -56,7 +56,7 @@ function doPost(e) {
     // Using GmailApp for advanced options like aliases
     const emailOptions = {
       attachments: [blob],
-      name: 'Butter Invoicing'
+      name: 'Buttercup Digital Invoicing'
     };
 
     // Add 'from' alias if configured

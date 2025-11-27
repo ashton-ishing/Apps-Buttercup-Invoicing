@@ -1,13 +1,62 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../AppContext';
 import { FileSpreadsheet, Download, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 
 export default function TaxPack() {
   const { invoices, expenses } = useApp();
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('TaxPack Debug:', {
+      totalInvoices: invoices.length,
+      invoices: invoices.map(inv => ({
+        invoiceNumber: inv.invoiceNumber,
+        issueDate: inv.issueDate,
+        status: inv.status,
+        total: inv.total
+      })),
+      totalExpenses: expenses.length
+    });
+  }, [invoices, expenses]);
+  
+  // Calculate available financial years from invoices/expenses
+  const availableYears = Array.from(new Set([
+    ...invoices.map(inv => {
+      if (!inv.issueDate) return null;
+      const date = new Date(inv.issueDate);
+      const year = date.getFullYear();
+      const month = date.getMonth(); // 0-11, where 6 = July
+      // If date is July or later, it's in the next FY
+      return month >= 6 ? year + 1 : year;
+    }).filter(y => y !== null),
+    ...expenses.map(exp => {
+      if (!exp.date) return null;
+      const date = new Date(exp.date);
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      return month >= 6 ? year + 1 : year;
+    }).filter(y => y !== null),
+    // Always include current FY
+    (() => {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      return month >= 6 ? year + 1 : year;
+    })()
+  ])).sort((a, b) => b - a);
+  
+  // Default to current financial year
+  const currentFY = (() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    return month >= 6 ? year + 1 : year;
+  })();
+  
+  const [selectedYear, setSelectedYear] = useState(availableYears.length > 0 ? availableYears[0] : currentFY);
 
   // Australian Financial Year: July 1 (Year-1) to June 30 (Year)
-  // e.g. FY 2024 is July 1, 2023 to June 30, 2024
+  // e.g. FY 2026 is July 1, 2025 to June 30, 2026
   const getFinancialYearDates = (year) => {
     const start = new Date(year - 1, 6, 1); // July 1st of previous year
     const end = new Date(year, 5, 30);      // June 30th of current year
@@ -32,11 +81,38 @@ export default function TaxPack() {
 
   // Filter Data for Selected FY
   const fyInvoices = invoices.filter(inv => {
-    if (!inv.issueDate) return false;
-    if (inv.status === 'Draft') return false;
-    return isInFY(inv.issueDate);
+    if (!inv.issueDate) {
+      console.log('Invoice missing issueDate:', inv.invoiceNumber);
+      return false;
+    }
+    if (inv.status === 'Draft') {
+      console.log('Invoice is Draft, excluding:', inv.invoiceNumber);
+      return false;
+    }
+    const inRange = isInFY(inv.issueDate);
+    if (!inRange) {
+      console.log('Invoice not in FY range:', inv.invoiceNumber, inv.issueDate, 'FY:', selectedYear, 'Range:', start, 'to', end);
+    }
+    return inRange;
   });
   const fyExpenses = expenses.filter(exp => exp.date && isInFY(exp.date));
+  
+  // Debug filtered results
+  useEffect(() => {
+    console.log('TaxPack Filtered Results:', {
+      selectedYear,
+      fyRange: { start: start.toISOString(), end: end.toISOString() },
+      fyInvoicesCount: fyInvoices.length,
+      fyInvoices: fyInvoices.map(inv => ({
+        invoiceNumber: inv.invoiceNumber,
+        issueDate: inv.issueDate,
+        total: inv.total,
+        tax: inv.tax
+      })),
+      totalIncome,
+      gstCollected
+    });
+  }, [selectedYear, fyInvoices, totalIncome, gstCollected, start, end]);
 
   // Calculate Totals - ensure numeric conversion
   const totalIncome = fyInvoices.reduce((sum, inv) => {
@@ -64,13 +140,8 @@ export default function TaxPack() {
     return acc;
   }, {});
 
-  const availableYears = Array.from(new Set([
-    ...invoices.map(inv => new Date(inv.issueDate).getFullYear()),
-    ...expenses.map(exp => new Date(exp.date).getFullYear()),
-    new Date().getFullYear()
-  ])).sort((a, b) => b - a);
-  // Adjust to FY logic (if date is > June, it's next FY)
-  const fyOptions = Array.from(new Set(availableYears.map(y => y + 1))).sort((a,b) => b-a);
+  // Use the availableYears calculated above
+  const fyOptions = availableYears.length > 0 ? availableYears : [currentFY];
 
 
   return (

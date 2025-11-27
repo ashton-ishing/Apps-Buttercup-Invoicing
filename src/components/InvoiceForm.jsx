@@ -86,9 +86,12 @@ export default function InvoiceForm({ setView }) {
           const pdfBase64 = doc.output('datauristring').split(',')[1]; // Remove "data:application/pdf;base64,"
 
           // Send to Google Apps Script
-          await fetch(googleScriptUrl, {
+          console.log('Sending to Google Script:', googleScriptUrl);
+          console.log('Invoice data:', { invoiceNumber: savedInvoice.invoiceNumber, client: client.name });
+          
+          const response = await fetch(googleScriptUrl, {
               method: 'POST',
-              mode: 'no-cors', // Google Scripts CORS fix
+              mode: 'no-cors', // Google Scripts CORS fix - prevents reading response
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                   invoice: savedInvoice,
@@ -97,8 +100,11 @@ export default function InvoiceForm({ setView }) {
                   emailBody: getPreviewEmail()
               })
           });
+          
           // Note: with no-cors we can't check response.ok, assume success if no network error
-          alert('Invoice sent to automation queue! (Email + Drive + Sheet)');
+          // Check Google Apps Script execution logs to verify it actually ran
+          console.log('Request sent (check Google Script execution logs to verify)');
+          alert('Invoice sent to automation queue! (Email + Drive + Sheet)\n\n⚠️ Check your Google Apps Script execution logs to verify it processed successfully.');
         } catch (e) {
           alert('Invoice saved but error triggering automation: ' + e.message);
           console.error(e);

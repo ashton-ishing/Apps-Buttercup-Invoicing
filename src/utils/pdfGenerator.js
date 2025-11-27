@@ -70,25 +70,20 @@ export const generateInvoicePDF = async (invoice, client) => {
       currentY += 20; // Add space if logo fails
   }
 
-  // Company Info (Top Right)
+  // Company Info (Top Right - far right aligned)
   doc.setFontSize(11);
   doc.setTextColor(0);
   doc.setFont(undefined, 'bold');
-  const companyX = pageWidth - rightMargin - 80; // Right aligned
-  doc.text(companyInfo.name, companyX, currentY);
+  const companyX = pageWidth - rightMargin; // Far right aligned
+  doc.text(companyInfo.name, companyX, currentY, { align: 'right' });
   doc.setFont(undefined, 'normal');
   doc.setFontSize(9);
   if (companyInfo.abn) {
-    doc.text(companyInfo.abn, companyX, currentY + 6);
+    doc.text(companyInfo.abn, companyX, currentY + 6, { align: 'right' });
   }
 
-  // Invoice Title (Below Logo)
-  currentY += 15;
-  doc.setFontSize(24);
-  doc.setTextColor(0);
-  doc.setFont(undefined, 'bold');
-  doc.text("Invoice", leftMargin, currentY);
-  currentY += 12;
+  // Add 2cm space below company info
+  currentY += 26; // 6 (ABN line) + 20 (2cm spacing)
 
   // Invoice Details Box (Right Side)
   const boxWidth = 80;
@@ -131,7 +126,7 @@ export const generateInvoicePDF = async (invoice, client) => {
   doc.text(formatDate(invoice.dueDate), boxX + boxWidth - 3, boxY, { align: 'right' });
 
   // Invoice To Section (Left Side)
-  currentY += 5;
+  currentY -= 15; // Moved up by 2cm (20mm) from original position
   doc.setFontSize(10);
   doc.setFont(undefined, 'bold');
   doc.text("Invoice to:", leftMargin, currentY);
@@ -146,8 +141,8 @@ export const generateInvoicePDF = async (invoice, client) => {
   }
 
   // Service Table
-  currentY += 30;
-  const tableColumns = ["Service date", "Item", "Description", "Amount"];
+  currentY += 50; // Increased spacing to shift table down
+  const tableColumns = ["Service date", "Item", "Description", "Quantity", "Amount"];
   const tableRows = [];
 
   invoice.lineItems.forEach(item => {
@@ -155,6 +150,7 @@ export const generateInvoicePDF = async (invoice, client) => {
       formatDate(invoice.issueDate), // Service date
       item.category || 'Service',
       item.description || '',
+      item.quantity.toString(),
       `$${parseFloat(item.quantity * item.unitPrice).toFixed(2)}`
     ];
     tableRows.push(invoiceData);
@@ -172,14 +168,16 @@ export const generateInvoicePDF = async (invoice, client) => {
           fillColor: [240, 240, 240],
           textColor: [0, 0, 0],
           fontStyle: 'bold',
-          fontSize: 9
+          fontSize: 9,
+          4: { halign: 'right' } // Right align Amount header (now column 4)
         },
         bodyStyles: { fontSize: 9 },
         columnStyles: {
-          0: { cellWidth: 30 },
-          1: { cellWidth: 40 },
-          2: { cellWidth: 80 },
-          3: { cellWidth: 30, halign: 'right' }
+          0: { cellWidth: 28 }, // Service date
+          1: { cellWidth: 35 }, // Item
+          2: { cellWidth: 60 }, // Description
+          3: { cellWidth: 20, halign: 'right' }, // Quantity
+          4: { cellWidth: 30, halign: 'right' } // Amount
         },
         margin: { left: leftMargin, right: rightMargin }
       });
@@ -198,31 +196,59 @@ export const generateInvoicePDF = async (invoice, client) => {
     doc.rect(leftMargin, tableY, pageWidth - leftMargin - rightMargin, 8, 'F');
     doc.setTextColor(0);
     doc.setFont(undefined, 'bold');
-    doc.text(tableColumns[0], leftMargin + 2, tableY + 6);
-    doc.text(tableColumns[1], leftMargin + 35, tableY + 6);
-    doc.text(tableColumns[2], leftMargin + 80, tableY + 6);
-    doc.text(tableColumns[3], pageWidth - rightMargin - 30, tableY + 6, { align: 'right' });
+    doc.text(tableColumns[0], leftMargin + 2, tableY + 6); // Service date
+    doc.text(tableColumns[1], leftMargin + 32, tableY + 6); // Item
+    doc.text(tableColumns[2], leftMargin + 70, tableY + 6); // Description
+    doc.text(tableColumns[3], leftMargin + 135, tableY + 6, { align: 'right' }); // Quantity
+    doc.text(tableColumns[4], pageWidth - rightMargin - 2, tableY + 6, { align: 'right' }); // Amount
     tableY += 10;
     
     // Draw rows
     doc.setFont(undefined, 'normal');
     tableRows.forEach(row => {
-      doc.text(row[0], leftMargin + 2, tableY + 6);
-      doc.text(row[1], leftMargin + 35, tableY + 6);
-      doc.text(row[2], leftMargin + 80, tableY + 6);
-      doc.text(row[3], pageWidth - rightMargin - 30, tableY + 6, { align: 'right' });
+      doc.text(row[0], leftMargin + 2, tableY + 6); // Service date
+      doc.text(row[1], leftMargin + 32, tableY + 6); // Item
+      doc.text(row[2], leftMargin + 70, tableY + 6); // Description
+      doc.text(row[3], leftMargin + 135, tableY + 6, { align: 'right' }); // Quantity
+      doc.text(row[4], pageWidth - rightMargin - 2, tableY + 6, { align: 'right' }); // Amount
       tableY += 8;
     });
     
     finalY = tableY + 5;
   }
   
+  // Add extra space between table and balance section
+  finalY += 15;
+  
   // Payment Summary (Bottom Right)
   const summaryX = pageWidth - rightMargin - 75;
   const summaryBoxWidth = 75;
   
-  // Balance due (highlighted)
+  doc.setFontSize(9);
+  doc.setTextColor(0);
+  
+  // Calculate amounts
+  const subtotal = invoice.subtotal || invoice.total;
+  const gstAmount = invoice.tax || 0;
   const balanceDue = invoice.total;
+  
+  // Show Subtotal if GST is included
+  if (invoice.includeGst && gstAmount > 0) {
+    doc.setFont(undefined, 'normal');
+    doc.text(`Subtotal`, summaryX, finalY);
+    doc.text(`$${subtotal.toFixed(2)}`, summaryX + summaryBoxWidth - 4, finalY, { align: 'right' });
+    finalY += 6;
+  }
+  
+  // Show GST line above balance (always show if there's a GST amount)
+  if (gstAmount > 0) {
+    doc.setFont(undefined, 'normal');
+    doc.text(`GST (10%)`, summaryX, finalY);
+    doc.text(`$${gstAmount.toFixed(2)}`, summaryX + summaryBoxWidth - 4, finalY, { align: 'right' });
+    finalY += 8;
+  }
+  
+  // Balance due (highlighted)
   const balanceAmount = `$${balanceDue.toFixed(2)}`;
   doc.setFillColor(60, 60, 60);
   doc.rect(summaryX - 2, finalY - 5, summaryBoxWidth, 8, 'F');
@@ -246,6 +272,7 @@ export const generateInvoicePDF = async (invoice, client) => {
   doc.text("Ashton Maloney", leftMargin, finalY + 12);
   doc.text("BSB: 774-001", leftMargin, finalY + 18);
   doc.text("ACC: 23-652-1647", leftMargin, finalY + 24);
+  doc.text(`Description: ${invoice.invoiceNumber}`, leftMargin, finalY + 30);
 
   return doc;
 };
